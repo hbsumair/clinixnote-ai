@@ -2,7 +2,10 @@
 # A Streamlit-based app for generating SOAP notes, differentials, and discharge summaries from patient input
 
 import streamlit as st
-import openai
+from openai import OpenAI  
+client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+
+
 
 # --- SETUP ---
 st.set_page_config(page_title="ClinixNote AI", layout="centered")
@@ -33,18 +36,19 @@ Patient Case:
             prompt += patient_input
 
             try:
-                response = openai.ChatCompletion.create(
-                    model="gpt-4o",
-                    messages=[
-                        {"role": "system", "content": "You are a clinical AI assistant helping doctors generate structured medical notes."},
-                        {"role": "user", "content": prompt}
-                    ],
-                    temperature=0.5
-                )
-                output = response['choices'][0]['message']['content']
-                st.markdown("---")
-                st.markdown(output)
-            except Exception as e:
-                st.error(f"Error: {e}")
+    response = client.chat.completions.create(
+        model="gpt-4o",
+        messages=[
+            {"role": "system", "content": "You are a clinical AI assistant helping doctors generate structured medical notes."},
+            {"role": "user", "content": prompt}
+        ],
+        temperature=0.5
+    )
+    output = response.choices[0].message.content
+    st.markdown("---")
+    st.markdown(output)
+except Exception as e:
+    st.error(f"Error: {e}")
+
 else:
     st.warning("🔑 Please enter your OpenAI API key to continue.")
