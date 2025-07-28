@@ -1,3 +1,4 @@
+
 # ClinixNote AI — MVP Skeleton
 # A Streamlit-based app for generating SOAP notes, differentials, and discharge summaries from patient input
 
@@ -39,7 +40,7 @@ Patient Case:
 
         try:
             response = client.chat.completions.create(
-                model="gpt-4o",
+                model="gpt-3.5-turbo",  # 🔄 Changed from "gpt-4o"
                 messages=[
                     {"role": "system", "content": "You are a clinical AI assistant helping doctors generate structured medical notes."},
                     {"role": "user", "content": prompt}
