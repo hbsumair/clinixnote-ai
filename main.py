@@ -3,9 +3,8 @@
 
 import streamlit as st
 from openai import OpenAI  
+
 client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
-
-
 
 # --- SETUP ---
 st.set_page_config(page_title="ClinixNote AI", layout="centered")
@@ -18,8 +17,6 @@ Enter patient details below (via text). The AI will generate a SOAP note, differ
 openai_api_key = st.text_input("Enter your OpenAI API Key", type="password")
 
 if openai_api_key:
-    openai.api_key = openai_api_key
-
     # --- Text Input ---
     patient_input = st.text_area("Paste Patient Case Summary", height=200)
 
@@ -32,24 +29,23 @@ You are an expert clinical assistant AI. Given this patient presentation, genera
 3. A brief discharge summary.
 
 Patient Case:
+{patient_input}
 """
-            prompt += patient_input
 
-try:
-    response = client.chat.completions.create(
-        model="gpt-4o",
-        messages=[
-            {"role": "system", "content": "You are a clinical AI assistant helping doctors generate structured medical notes."},
-            {"role": "user", "content": prompt}
-        ],
-        temperature=0.5
-    )
-    output = response.choices[0].message.content
-    st.markdown("---")
-    st.markdown(output)
-except Exception as e:
-    st.error(f"Error: {e}")
-
+            try:
+                response = client.chat.completions.create(
+                    model="gpt-4o",
+                    messages=[
+                        {"role": "system", "content": "You are a clinical AI assistant helping doctors generate structured medical notes."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    temperature=0.5
+                )
+                output = response.choices[0].message.content
+                st.markdown("---")
+                st.markdown(output)
+            except Exception as e:
+                st.error(f"Error: {e}")
 
 else:
     st.warning("🔑 Please enter your OpenAI API key to continue.")
