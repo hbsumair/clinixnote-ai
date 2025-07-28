@@ -36,19 +36,19 @@ Patient Case:
             prompt += patient_input
 
             try:
-    response = client.chat.completions.create(
-        model="gpt-4o",
-        messages=[
-            {"role": "system", "content": "You are a clinical AI assistant helping doctors generate structured medical notes."},
-            {"role": "user", "content": prompt}
-        ],
-        temperature=0.5
-    )
-    output = response.choices[0].message.content
-    st.markdown("---")
-    st.markdown(output)
-except Exception as e:
-    st.error(f"Error: {e}")
+                response = client.chat.completions.create(
+                    model="gpt-4o",
+                    messages=[
+                    {"role": "system", "content": "You are a clinical AI assistant helping doctors generate structured medical notes."},
+                    {"role": "user", "content": prompt}
+                    ],
+                    temperature=0.5
+                    )
+                    output = response.choices[0].message.content
+                    st.markdown("---")
+                    st.markdown(output)
+           except Exception as e:
+               st.error(f"Error: {e}")
 
 else:
     st.warning("🔑 Please enter your OpenAI API key to continue.")
