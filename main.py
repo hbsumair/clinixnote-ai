@@ -1,100 +1,95 @@
+# ClinixNote AI — MVP with Manual Final Diagnosis for Discharge
 import streamlit as st
-from openai import OpenAI  
+from openai import OpenAI
 
+# --- SETUP ---
 st.set_page_config(page_title="ClinixNote AI", layout="centered")
 st.title("🩺 ClinixNote AI")
 st.markdown("""
-Enter patient details to generate a SOAP note and a discharge summary when needed.
+Enter patient details below. The AI will generate a SOAP note and differential diagnoses.  
+You can then enter the **final diagnosis** to generate a discharge summary.
 """)
 
-openai_api_key = st.text_input("🔑 Enter your OpenAI API Key", type="password")
+# --- API Key Input ---
+openai_api_key = st.text_input("Enter your OpenAI API Key", type="password")
 
+# --- Stop app if no key ---
 if not openai_api_key:
-    st.warning("Please enter your API key to proceed.")
+    st.warning("🔑 Please enter your OpenAI API key to continue.")
     st.stop()
 
+# --- Initialize OpenAI client ---
 client = OpenAI(api_key=openai_api_key)
 
-# --- Patient info input ---
-with st.form("patient_info_form"):
-    st.subheader("📝 Patient Info")
-    patient_name = st.text_input("Name")
-    age = st.number_input("Age", 0, 120)
-    gender = st.selectbox("Gender", ["Male", "Female", "Other"])
-    case_summary = st.text_area("Case Summary", height=200)
-    submitted = st.form_submit_button("🧠 Generate Clinical Note")
+# --- Patient Case Input ---
+patient_input = st.text_area("Paste Patient Case Summary", height=200)
 
-if "patient_data" not in st.session_state:
-    st.session_state.patient_data = {}
+# --- Generate SOAP & Differentials ---
+if st.button("🧠 Generate SOAP Note & Differentials") and patient_input.strip():
+    with st.spinner("Generating clinical notes..."):
+        prompt = f"""
+You are a clinical AI assistant. From the following patient case, generate:
 
-if submitted and case_summary.strip():
-    prompt = f"""
-You are a clinical AI. Given the following case, generate:
+1. A detailed SOAP note (Subjective, Objective, Assessment, Plan).
+2. A list of 3–5 differential diagnoses with reasoning.
 
-1. SOAP note (clearly labeled).
-2. Differential diagnoses (3–5) with reasons.
-3. A management plan including:
-   - Medications (name, dose, frequency).
-   - Follow-up timeline.
-   - Alarming symptoms for which patient should return.
+Do NOT include any discharge summary or final diagnosis.
 
-Patient Name: {patient_name}
-Age: {age}
-Gender: {gender}
-Case Summary: {case_summary}
-    """
-
-    with st.spinner("Generating clinical note..."):
+Patient Case:
+{patient_input}
+"""
         try:
             response = client.chat.completions.create(
                 model="gpt-3.5-turbo",
                 messages=[
-                    {"role": "system", "content": "You are a clinical AI assistant helping doctors."},
+                    {"role": "system", "content": "You are a clinical AI assistant helping doctors generate structured notes."},
                     {"role": "user", "content": prompt}
                 ],
                 temperature=0.5
             )
-            result = response.choices[0].message.content
-            st.session_state.patient_data = {
-                "name": patient_name,
-                "age": age,
-                "gender": gender,
-                "case_summary": case_summary,
-                "ai_note": result
-            }
-            st.success("✅ Note generated!")
+            output = response.choices[0].message.content
             st.markdown("---")
-            st.markdown(result)
+            st.subheader("📋 Clinical Output")
+            st.markdown(output)
         except Exception as e:
             st.error(f"❌ Error: {e}")
 
-# --- Discharge Summary Button ---
-if st.session_state.get("patient_data"):
-    if st.button("📄 Generate Discharge Summary"):
+# --- Manual Final Diagnosis for Discharge Summary ---
+st.markdown("---")
+st.subheader("📝 Generate Discharge Summary")
+final_diagnosis = st.text_input("Enter Final Diagnosis")
+
+if st.button("📤 Generate Discharge Summary") and final_diagnosis.strip() and patient_input.strip():
+    with st.spinner("Generating discharge summary..."):
         discharge_prompt = f"""
-You are a clinical AI. Based on the following case and clinical note, generate a discharge summary that includes:
+You are a clinical AI assistant. Using the following patient case and the final diagnosis provided by the doctor, generate a detailed discharge summary that includes:
 
-- Final diagnosis
-- Medications with name, dose, frequency
-- Follow-up instructions
-- Alarming symptoms that require urgent return
+1. Final diagnosis (provided below),
+2. Medications prescribed (name, dose, frequency),
+3. Follow-up instructions (e.g., when to return),
+4. Alarming symptoms to return to the hospital for,
+5. Any lifestyle or rehab advice.
 
-Case Summary: {st.session_state['patient_data']['case_summary']}
-AI Clinical Note: {st.session_state['patient_data']['ai_note']}
-        """
-        with st.spinner("Creating discharge summary..."):
-            try:
-                discharge_response = client.chat.completions.create(
-                    model="gpt-3.5-turbo",
-                    messages=[
-                        {"role": "system", "content": "You are a clinical AI generating detailed discharge summaries."},
-                        {"role": "user", "content": discharge_prompt}
-                    ],
-                    temperature=0.5
-                )
-                discharge_text = discharge_response.choices[0].message.content
-                st.subheader("🏥 Discharge Summary")
-                st.markdown(discharge_text)
-            except Exception as e:
-                st.error(f"❌ Error: {e}")
+Only generate the discharge summary. Do NOT repeat SOAP or differentials.
+
+Patient Case:
+{patient_input}
+
+Final Diagnosis:
+{final_diagnosis}
+"""
+        try:
+            discharge_response = client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": "You are a clinical AI assistant generating discharge summaries."},
+                    {"role": "user", "content": discharge_prompt}
+                ],
+                temperature=0.5
+            )
+            discharge_output = discharge_response.choices[0].message.content
+            st.markdown("### 🏥 Discharge Summary")
+            st.markdown(discharge_output)
+        except Exception as e:
+            st.error(f"❌ Error: {e}")
 
