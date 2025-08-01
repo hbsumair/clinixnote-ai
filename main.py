@@ -1,123 +1,129 @@
 import streamlit as st
 from openai import OpenAI
-import csv
-import os
-from datetime import datetime
 from fpdf import FPDF
+import os
+import pandas as pd
 
-# --- PAGE SETUP ---
+# --- Page Setup ---
 st.set_page_config(page_title="ClinixNote AI", layout="centered")
 st.title("🩺 ClinixNote AI")
+st.markdown("Enter patient details below. The AI will generate SOAP notes, differentials, and discharge summaries.")
 
-st.markdown("""
-Enter patient details below. Generate SOAP notes, differential diagnoses, and a bilingual discharge summary.
-""")
-
-# --- OPENAI API KEY ---
+# --- Input API Key ---
 openai_api_key = st.text_input("🔐 Enter your OpenAI API Key", type="password")
 if not openai_api_key:
-    st.warning("Please enter your OpenAI API key to continue.")
+    st.warning("Please enter your API key.")
     st.stop()
 
 client = OpenAI(api_key=openai_api_key)
 
-# --- PATIENT INFO ---
-st.subheader("👤 Patient Information")
-patient_name = st.text_input("Patient Name")
-patient_number = st.text_input("Phone Number")
-patient_input = st.text_area("Case Summary", height=200)
+# --- Local CSV for Patient Info ---
+DB_FILE = "patients_db.csv"
+if not os.path.exists(DB_FILE):
+    df_init = pd.DataFrame(columns=["Name", "Phone", "Case Summary", "Final Diagnosis"])
+    df_init.to_csv(DB_FILE, index=False)
 
-# --- SAVE TO DATABASE ---
-def save_to_csv(name, number):
-    file_exists = os.path.isfile("patient_data.csv")
-    with open("patient_data.csv", "a", newline='', encoding="utf-8") as file:
-        writer = csv.writer(file)
-        if not file_exists:
-            writer.writerow(["Name", "Phone", "Date"])
-        writer.writerow([name, number, datetime.now().strftime("%Y-%m-%d %H:%M")])
+# --- Patient Info Form ---
+st.header("📄 Patient Case Input")
+name = st.text_input("Patient Name")
+phone = st.text_input("Phone Number")
+case_summary = st.text_area("Case Summary", height=200)
+final_diagnosis = st.text_input("Final Diagnosis (Enter before Discharge Summary)")
 
-# --- CLINICAL NOTE ---
-if st.button("🧠 Generate Clinical Note") and patient_input.strip():
-    if not patient_name or not patient_number:
-        st.error("⚠️ Please enter patient name and number.")
+# Save patient info
+if st.button("💾 Save Case"):
+    if name and phone and case_summary:
+        new_row = pd.DataFrame([[name, phone, case_summary, final_diagnosis]], columns=["Name", "Phone", "Case Summary", "Final Diagnosis"])
+        new_row.to_csv(DB_FILE, mode="a", header=False, index=False)
+        st.success("Patient case saved.")
+    else:
+        st.warning("Please enter Name, Phone, and Case Summary.")
+
+# --- Generate Clinical Note ---
+if st.button("🧠 Generate Clinical Note"):
+    if not case_summary.strip():
+        st.warning("Please enter the case summary.")
         st.stop()
 
-    save_to_csv(patient_name, patient_number)
-
-    with st.spinner("Generating SOAP note and differentials..."):
+    with st.spinner("Generating notes and diagnoses..."):
         prompt = f"""
-You are a clinical AI. From the following patient case, generate:
+You are a clinical assistant AI. Based on this patient case, generate:
+1. A SOAP note.
+2. 3–5 differential diagnoses with brief reasoning.
 
-1. SOAP Note
-2. Differential diagnoses with reasons (3-5)
-
-Case:
-{patient_input}
+Patient Case:
+{case_summary}
 """
         try:
             response = client.chat.completions.create(
                 model="gpt-4o",
                 messages=[
-                    {"role": "system", "content": "You are a helpful AI doctor assistant."},
+                    {"role": "system", "content": "You are a clinical AI assistant helping doctors generate structured medical notes."},
                     {"role": "user", "content": prompt}
                 ],
                 temperature=0.5
             )
             output = response.choices[0].message.content
-            st.markdown("### 📝 Clinical Note & Differentials")
+            st.markdown("---")
             st.markdown(output)
         except Exception as e:
             st.error(f"❌ Error: {e}")
 
-# --- DISCHARGE SUMMARY ---
-st.subheader("🏥 Discharge Summary Generator")
-final_diagnosis = st.text_input("Enter Final Diagnosis")
-if st.button("📤 Generate Discharge Summary") and final_diagnosis and patient_name:
-    with st.spinner("Generating bilingual discharge summary..."):
-        discharge_prompt = f"""
-Generate a detailed hospital discharge summary in both English and Urdu.
-
+# --- Generate Discharge Summary ---
+def generate_discharge_summary(case_summary, final_diagnosis):
+    discharge_prompt = f"""
+You are a medical assistant. Generate a bilingual (Urdu + English) discharge summary based on this final diagnosis and patient case.
 Include:
-- Final Diagnosis: {final_diagnosis}
-- Medications (name, dose, frequency, days)
+- Diagnosis (heading)
+- Treatment/Medication plan: drug names, dose, frequency, and duration
 - Follow-up timing
-- Alarming symptoms for return
-- Structure the Urdu section properly and label clearly.
+- Alarming signs that warrant return
 
-Patient: {patient_name}
+Case Summary: {case_summary}
+Final Diagnosis: {final_diagnosis}
 """
+    response = client.chat.completions.create(
+        model="gpt-4o",
+        messages=[
+            {"role": "system", "content": "You are a bilingual Urdu-English clinical assistant."},
+            {"role": "user", "content": discharge_prompt}
+        ],
+        temperature=0.5
+    )
+    return response.choices[0].message.content
 
+def save_pdf_discharge(name, content):
+    pdf = FPDF()
+    pdf.add_page()
+
+    # Add custom font
+    font_path = "NotoNaskhArabic-Regular.ttf"
+    pdf.add_font("Noto", "", font_path, uni=True)
+    pdf.set_font("Noto", size=12)
+
+    for line in content.split('\n'):
+        pdf.multi_cell(0, 10, line)
+
+    filename = f"{name.replace(' ', '_')}_discharge.pdf"
+    pdf.output(filename)
+    return filename
+
+if st.button("📤 Generate Discharge Summary"):
+    if not final_diagnosis.strip():
+        st.warning("Please enter final diagnosis first.")
+        st.stop()
+    if not case_summary.strip():
+        st.warning("Please enter case summary first.")
+        st.stop()
+
+    with st.spinner("Generating discharge summary..."):
         try:
-            response = client.chat.completions.create(
-                model="gpt-4o",
-                messages=[
-                    {"role": "system", "content": "You are a senior hospital discharge officer writing clear bilingual summaries."},
-                    {"role": "user", "content": discharge_prompt}
-                ],
-                temperature=0.5
-            )
-            discharge_text = response.choices[0].message.content
-
-            # --- PDF EXPORT ---
-            pdf = FPDF()
-            pdf.add_page()
-            pdf.add_font("DejaVu", "", "DejaVuSans.ttf", uni=True)
-            pdf.set_font("DejaVu", size=12)
-
-            for line in discharge_text.split('\n'):
-                pdf.multi_cell(0, 10, txt=line)
-
-            filename = f"discharge_{patient_name.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
-            pdf.output(filename)
-
-            st.success("✅ Discharge summary generated.")
-            with open(filename, "rb") as f:
-                st.download_button(
-                    label="📄 Download PDF",
-                    data=f,
-                    file_name=filename,
-                    mime="application/pdf"
-                )
-
+            summary = generate_discharge_summary(case_summary, final_diagnosis)
+            st.markdown("---")
+            st.markdown(summary)
+            filepath = save_pdf_discharge(name or "patient", summary)
+            with open(filepath, "rb") as f:
+                st.download_button("⬇️ Download Discharge PDF", f, file_name=filepath)
         except Exception as e:
             st.error(f"❌ Error: {e}")
+
