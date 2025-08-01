@@ -93,26 +93,31 @@ Final Diagnosis: {final_diagnosis}
     return response.choices[0].message.content
 
 def save_pdf_discharge(name, content):
+    from fpdf import FPDF
+
     pdf = FPDF()
     pdf.add_page()
 
-    font_path = "NotoNaskhArabic-Regular.ttf"
-    pdf.add_font("Noto", "", font_path, uni=True)
+    # Register the correct Unicode Urdu + English font
+    pdf.add_font("Noto", "", "NotoNaskhArabic-Regular.ttf", uni=True)
     pdf.set_font("Noto", size=12)
 
-    # Safe cell width to avoid RTL/Urdu issues
     effective_width = pdf.w - 2 * pdf.l_margin
 
-    # Break text into manageable lines
+    # Write Urdu + English discharge summary line by line
     for paragraph in content.split('\n'):
         if paragraph.strip():
-            pdf.multi_cell(w=effective_width, h=8, txt=paragraph, align='L')
+            try:
+                pdf.multi_cell(w=effective_width, h=8, txt=paragraph, align='L')
+            except Exception as e:
+                print(f"Encoding error in line: {paragraph}")
         else:
-            pdf.ln(5)  # add space on empty lines
+            pdf.ln(4)  # line spacing
 
     filename = f"{name.replace(' ', '_')}_discharge.pdf"
     pdf.output(filename)
     return filename
+
 
 
 if st.button("📤 Generate Discharge Summary"):
