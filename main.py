@@ -96,17 +96,24 @@ def save_pdf_discharge(name, content):
     pdf = FPDF()
     pdf.add_page()
 
-    # Add custom font
     font_path = "NotoNaskhArabic-Regular.ttf"
     pdf.add_font("Noto", "", font_path, uni=True)
     pdf.set_font("Noto", size=12)
 
-    for line in content.split('\n'):
-        pdf.multi_cell(0, 10, line)
+    # Safe cell width to avoid RTL/Urdu issues
+    effective_width = pdf.w - 2 * pdf.l_margin
+
+    # Break text into manageable lines
+    for paragraph in content.split('\n'):
+        if paragraph.strip():
+            pdf.multi_cell(w=effective_width, h=8, txt=paragraph, align='L')
+        else:
+            pdf.ln(5)  # add space on empty lines
 
     filename = f"{name.replace(' ', '_')}_discharge.pdf"
     pdf.output(filename)
     return filename
+
 
 if st.button("📤 Generate Discharge Summary"):
     if not final_diagnosis.strip():
