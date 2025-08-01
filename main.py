@@ -1,13 +1,16 @@
-# ClinixNote AI — MVP with Manual Final Diagnosis for Discharge
+# ClinixNote AI — Updated with Database and PDF Export
 import streamlit as st
 from openai import OpenAI
+import pandas as pd
+from fpdf import FPDF
+import os
 
 # --- SETUP ---
 st.set_page_config(page_title="ClinixNote AI", layout="centered")
 st.title("🩺 ClinixNote AI")
+
 st.markdown("""
-Enter patient details below. The AI will generate a SOAP note and differential diagnoses.  
-You can then enter the **final diagnosis** to generate a discharge summary.
+Enter patient details below. The AI will generate a SOAP note, differential diagnoses, and a discharge summary.
 """)
 
 # --- API Key Input ---
@@ -21,75 +24,82 @@ if not openai_api_key:
 # --- Initialize OpenAI client ---
 client = OpenAI(api_key=openai_api_key)
 
-# --- Patient Case Input ---
+# --- Patient Inputs ---
+patient_name = st.text_input("Patient Name")
+patient_number = st.text_input("Patient Phone Number")
+final_diagnosis = st.text_input("Final Diagnosis (enter before generating discharge)")
+
 patient_input = st.text_area("Paste Patient Case Summary", height=200)
 
-# --- Generate SOAP & Differentials ---
-if st.button("🧠 Generate SOAP Note & Differentials") and patient_input.strip():
-    with st.spinner("Generating clinical notes..."):
+# --- Generate Note ---
+if st.button("🧠 Generate Clinical Note") and patient_input.strip():
+    with st.spinner("Generating notes and diagnoses..."):
         prompt = f"""
-You are a clinical AI assistant. From the following patient case, generate:
-
-1. A detailed SOAP note (Subjective, Objective, Assessment, Plan).
+You are an expert clinical assistant AI. Given this patient presentation, generate:
+1. A SOAP note.
 2. A list of 3–5 differential diagnoses with reasoning.
-
-Do NOT include any discharge summary or final diagnosis.
+3. A brief discharge summary that EXCLUDES the final diagnosis. That will be added by the doctor manually later.
 
 Patient Case:
 {patient_input}
 """
+
         try:
             response = client.chat.completions.create(
-                model="gpt-3.5-turbo",
+                model="gpt-3.5-turbo",  # Use GPT-3.5 for free tier
                 messages=[
-                    {"role": "system", "content": "You are a clinical AI assistant helping doctors generate structured notes."},
+                    {"role": "system", "content": "You are a clinical AI assistant helping doctors generate structured medical notes."},
                     {"role": "user", "content": prompt}
                 ],
                 temperature=0.5
             )
             output = response.choices[0].message.content
             st.markdown("---")
-            st.subheader("📋 Clinical Output")
             st.markdown(output)
-        except Exception as e:
-            st.error(f"❌ Error: {e}")
 
-# --- Manual Final Diagnosis for Discharge Summary ---
-st.markdown("---")
-st.subheader("📝 Generate Discharge Summary")
-final_diagnosis = st.text_input("Enter Final Diagnosis")
+            # Save to CSV
+            patient_record = {
+                "Name": patient_name,
+                "Phone": patient_number,
+                "Case Summary": patient_input,
+                "Final Diagnosis": final_diagnosis,
+                "Generated Notes": output
+            }
 
-if st.button("📤 Generate Discharge Summary") and final_diagnosis.strip() and patient_input.strip():
-    with st.spinner("Generating discharge summary..."):
-        discharge_prompt = f"""
-You are a clinical AI assistant. Using the following patient case and the final diagnosis provided by the doctor, generate a detailed discharge summary that includes:
+            df = pd.DataFrame([patient_record])
+            if os.path.exists("patients.csv"):
+                df.to_csv("patients.csv", mode="a", header=False, index=False)
+            else:
+                df.to_csv("patients.csv", index=False)
 
-1. Final diagnosis (provided below),
-2. Medications prescribed (name, dose, frequency),
-3. Follow-up instructions (e.g., when to return),
-4. Alarming symptoms to return to the hospital for,
-5. Any lifestyle or rehab advice.
+            st.success("✅ Patient data saved.")
 
-Only generate the discharge summary. Do NOT repeat SOAP or differentials.
+            # --- PDF Export ---
+            if st.button("📄 Export Discharge Summary as PDF"):
+                pdf = FPDF()
+                pdf.add_page()
 
-Patient Case:
-{patient_input}
+                # Hospital Letterhead (Placeholder)
+                pdf.set_font("Arial", 'B', 14)
+                pdf.cell(200, 10, "Hospital Name Here", ln=True, align="C")
+                pdf.set_font("Arial", '', 10)
+                pdf.cell(200, 10, "Address | Contact | Email", ln=True, align="C")
+                pdf.ln(10)
 
-Final Diagnosis:
-{final_diagnosis}
-"""
-        try:
-            discharge_response = client.chat.completions.create(
-                model="gpt-3.5-turbo",
-                messages=[
-                    {"role": "system", "content": "You are a clinical AI assistant generating discharge summaries."},
-                    {"role": "user", "content": discharge_prompt}
-                ],
-                temperature=0.5
-            )
-            discharge_output = discharge_response.choices[0].message.content
-            st.markdown("### 🏥 Discharge Summary")
-            st.markdown(discharge_output)
+                # Patient Info
+                pdf.set_font("Arial", '', 12)
+                pdf.multi_cell(0, 10, f"Patient Name: {patient_name}\nPhone: {patient_number}\nFinal Diagnosis: {final_diagnosis}")
+                pdf.ln(5)
+
+                # Discharge
+                pdf.multi_cell(0, 10, "AI-Generated Notes:\n" + output)
+
+                pdf_file = f"{patient_name.replace(' ', '_')}_Discharge.pdf"
+                pdf.output(pdf_file)
+
+                with open(pdf_file, "rb") as file:
+                    st.download_button(label="Download Discharge PDF", data=file, file_name=pdf_file)
+
         except Exception as e:
             st.error(f"❌ Error: {e}")
 
